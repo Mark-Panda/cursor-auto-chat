@@ -159,6 +159,28 @@ async function focusComposerInputDeep(): Promise<void> {
     }
 }
 
+/**
+ * 合成 Cmd+V 前尽量把焦点从普通编辑器拉到 Composer 所在区域，避免粘进当前打开的文件。
+ * 多根工作区 / 多标签时编辑器常抢焦点。
+ */
+async function focusComposerSurfaceBeforeSyntheticPaste(): Promise<void> {
+    const surfaceFirst = [
+        'workbench.action.focusAuxiliaryBar',
+        'composer.focusComposer',
+        ...FOCUS_COMPOSER_COMMANDS,
+    ];
+    for (const cmd of surfaceFirst) {
+        try {
+            await vscode.commands.executeCommand(cmd);
+        } catch {
+            /* 忽略 */
+        }
+    }
+    await delay(320);
+    await focusComposerInputDeep();
+    await delay(200);
+}
+
 async function focusChatInput(): Promise<void> {
     for (const cmd of FOCUS_CHAT_INPUT_COMMANDS) {
         try {
@@ -307,12 +329,21 @@ async function fillPromptForUi(
         let composerMacSyntheticPasteError: string | undefined;
         const useMacFallback =
             cfg.get<boolean>('fallbackMacOsPaste') ?? process.platform === 'darwin';
+
+        /** 先走命令注入：不依赖键盘焦点，避免 Cmd+V 落到当前编辑器（如新建空文件） */
+        const injectedFirst = await tryInjectPrompt(content);
+        if (injectedFirst) {
+            await delay(200);
+            return { method: `inject:${injectedFirst}` };
+        }
+
         if (useMacFallback && process.platform === 'darwin') {
             const prev = await vscode.env.clipboard.readText();
             try {
                 await vscode.env.clipboard.writeText(content);
                 await delay(120);
                 try {
+                    await focusComposerSurfaceBeforeSyntheticPaste();
                     await macOsSyntheticPaste();
                     /* osascript 返回后，界面可能稍晚才读剪贴板；若立刻在 finally 里 writeText(prev)，会粘成旧内容 */
                     await delay(600);
@@ -326,17 +357,6 @@ async function fillPromptForUi(
             } finally {
                 await vscode.env.clipboard.writeText(prev);
             }
-        }
-
-        const injected = await tryInjectPrompt(content);
-        if (injected) {
-            await delay(200);
-            return {
-                method: `inject:${injected}`,
-                ...(composerMacSyntheticPasteError
-                    ? { composerMacSyntheticPasteError }
-                    : {}),
-            };
         }
 
         try {
@@ -363,19 +383,32 @@ function sendJson(res: http.ServerResponse, status: number, payload: object): vo
     res.end(JSON.stringify(payload));
 }
 
-export function activate(context: vscode.ExtensionContext): void {
-    console.log('Cursor Auto Chat plugin is now active!');
+type CursorAutoChatListenOptions = {
+    port: number;
+    serveOnlyWhenFocused: boolean;
+};
 
-    if (!vscode.workspace.workspaceFolders?.length) {
-        console.warn(
-            '[cursor-auto-chat] 未打开工作区文件夹；部分 Cursor 功能会报 NoWorkspaceUriError，与扩展 HTTP 服务无关。建议在「文件 → 打开文件夹」下使用。'
-        );
+let httpServer: http.Server | null = null;
+let httpServerPort: number | undefined;
+
+function readListenOptions(): CursorAutoChatListenOptions {
+    const c = vscode.workspace.getConfiguration('cursorAutoChat');
+    return {
+        port: c.get<number>('port') ?? 3777,
+        serveOnlyWhenFocused: c.get<boolean>('serveOnlyWhenFocused') ?? false,
+    };
+}
+
+function stopHttpServer(): void {
+    if (httpServer) {
+        httpServer.close();
+        httpServer = null;
+        httpServerPort = undefined;
     }
+}
 
-    const config = vscode.workspace.getConfiguration('cursorAutoChat');
-    const port = config.get<number>('port') ?? 3777;
-
-    const server = http.createServer((req, res) => {
+function attachChatRoutes(server: http.Server, port: number): void {
+    server.on('request', (req, res) => {
         if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
             sendJson(res, 200, { ok: true, service: 'cursor-auto-chat' });
             return;
@@ -388,6 +421,7 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             req.on('end', () => {
                 void (async () => {
+                    const config = vscode.workspace.getConfiguration('cursorAutoChat');
                     try {
                         let data: { content?: string };
                         try {
@@ -471,16 +505,95 @@ export function activate(context: vscode.ExtensionContext): void {
         res.end('Not Found');
     });
 
-    server.listen(port, () => {
-        void vscode.window.showInformationMessage(
-            `Cursor Auto Chat server running on port ${port}`
-        );
+    server.on('error', (e: NodeJS.ErrnoException) => {
+        if (httpServer === server) {
+            httpServer = null;
+            httpServerPort = undefined;
+        }
+        if (e.code === 'EADDRINUSE') {
+            const hint =
+                readListenOptions().serveOnlyWhenFocused === false
+                    ? '也可尝试开启设置项 cursorAutoChat.serveOnlyWhenFocused：仅在前台窗口监听端口，多窗口可共用同一端口。'
+                    : '';
+            void vscode.window.showErrorMessage(
+                `Cursor Auto Chat：端口 ${port} 已被占用（常见于同一应用打开了多个窗口，每个窗口都会启动服务）。请在设置里修改 cursorAutoChat.port，或只保留一个需要对外提供 HTTP 的窗口。${hint}`
+            );
+        } else {
+            console.error('[cursor-auto-chat] HTTP server error:', e);
+        }
     });
+}
+
+function startHttpServer(opts: CursorAutoChatListenOptions): void {
+    if (httpServer) {
+        return;
+    }
+    const server = http.createServer();
+    attachChatRoutes(server, opts.port);
+    httpServer = server;
+    httpServerPort = opts.port;
+    server.listen(opts.port, () => {
+        if (opts.serveOnlyWhenFocused) {
+            console.log(
+                `[cursor-auto-chat] HTTP server listening on port ${opts.port}（失焦时暂停，多窗口可同端口）`
+            );
+        } else {
+            void vscode.window.showInformationMessage(
+                `Cursor Auto Chat server running on port ${opts.port}`
+            );
+        }
+    });
+}
+
+function syncHttpServer(): void {
+    const opts = readListenOptions();
+    const shouldListen = !opts.serveOnlyWhenFocused || vscode.window.state.focused;
+
+    if (!shouldListen) {
+        stopHttpServer();
+        return;
+    }
+
+    if (httpServer !== null && httpServerPort !== opts.port) {
+        stopHttpServer();
+    }
+
+    if (httpServer !== null) {
+        return;
+    }
+
+    startHttpServer(opts);
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+    console.log('Cursor Auto Chat plugin is now active!');
+
+    if (!vscode.workspace.workspaceFolders?.length) {
+        console.warn(
+            '[cursor-auto-chat] 未打开工作区文件夹；部分 Cursor 功能会报 NoWorkspaceUriError，与扩展 HTTP 服务无关。建议在「文件 → 打开文件夹」下使用。'
+        );
+    }
+
+    syncHttpServer();
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeWindowState(() => {
+            syncHttpServer();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('cursorAutoChat')) {
+                syncHttpServer();
+            }
+        })
+    );
 
     context.subscriptions.push({
         dispose: () => {
-            server.close();
-        }
+            stopHttpServer();
+        },
     });
 }
 

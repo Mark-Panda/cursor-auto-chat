@@ -38,6 +38,11 @@
           "type": "boolean",
           "default": true,
           "description": "When using Composer, try to switch to Agent mode (not Ask) via workbench.action.chat.toggleAgentMode before filling."
+        },
+        "cursorAutoChat.serveOnlyWhenFocused": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, start the HTTP server only while this window is focused; stops when you switch to another window/app so multiple Cursor windows can share the same port. External curl/scripts need this window focused (or Cursor in foreground), or set false for always-on."
         }
       }
     }
@@ -45,11 +50,14 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "vsix": "vsce package --allow-missing-repository",
+    "package-extension": "npm run vsix"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.2",
     "typescript": "^5.3.3"
   }
 }
