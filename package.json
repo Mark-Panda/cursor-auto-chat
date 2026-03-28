@@ -34,6 +34,11 @@
           "default": true,
           "description": "macOS only: activate Cursor and simulate Cmd+V for Lexical Composer. Requires System Settings → Privacy & Security → Accessibility (Cursor / Cursor Helper) and possibly Automation → allow Cursor to control System Events; quit Cursor fully after changing."
         },
+        "cursorAutoChat.fallbackMacOsSubmit": {
+          "type": "boolean",
+          "default": true,
+          "description": "macOS only: when built-in submit commands (composer.submit, etc.) all fail, simulate pressing Enter via System Events — same Accessibility / Automation permissions as fallbackMacOsPaste."
+        },
         "cursorAutoChat.preferAgentMode": {
           "type": "boolean",
           "default": true,

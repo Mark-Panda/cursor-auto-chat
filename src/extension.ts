@@ -40,7 +40,7 @@ function maybeNotifyMacAccessibilityHelp(stderrOrMessage: string): void {
 
     const openPrefs = '打开「辅助功能」设置';
     const msg =
-        '合成粘贴需要权限：请在「系统设置 → 隐私与安全性 → 辅助功能」中勾选 **Cursor**（若有 **Cursor Helper (Plugin)** 也一并勾选），并完全退出 Cursor（Cmd+Q）后重新打开。若仍提示 osascript：请在「隐私与安全性 → 自动化」中允许 Cursor 控制「系统事件 (System Events)」。';
+        '合成按键（粘贴 / 回车发送）需要权限：请在「系统设置 → 隐私与安全性 → 辅助功能」中勾选 **Cursor**（若有 **Cursor Helper (Plugin)** 也一并勾选），并完全退出 Cursor（Cmd+Q）后重新打开。若仍提示 osascript：请在「隐私与安全性 → 自动化」中允许 Cursor 控制「系统事件 (System Events)」。';
 
     void vscode.window.showWarningMessage(msg, openPrefs).then((choice) => {
         if (choice === openPrefs) {
@@ -234,13 +234,55 @@ async function preferAgentModeInComposer(): Promise<void> {
     }
 }
 
-async function submitOrHint(): Promise<{ ok: true; command: string } | { ok: false }> {
+async function trySubmitViaCommands(): Promise<{ ok: true; command: string } | { ok: false }> {
     for (const cmd of SUBMIT_COMMANDS) {
         try {
             await vscode.commands.executeCommand(cmd);
             return { ok: true, command: cmd };
         } catch {
             /* 下一个 */
+        }
+    }
+    return { ok: false };
+}
+
+/**
+ * macOS：在内置 submit 命令均不可用时，用 System Events 模拟按 Enter（与合成 Cmd+V 相同权限）。
+ */
+async function macOsSyntheticEnter(): Promise<void> {
+    await execFileAsync(
+        'osascript',
+        ['-e', 'tell application "Cursor" to activate'],
+        { timeout: 15000 }
+    );
+    await delay(200);
+    await execFileAsync(
+        'osascript',
+        [
+            '-e',
+            'tell application "System Events" to keystroke return',
+        ],
+        { timeout: 15000 }
+    );
+}
+
+async function submitWithMacOsFallback(
+    cfg: vscode.WorkspaceConfiguration
+): Promise<{ ok: true; command: string } | { ok: false }> {
+    const viaCmd = await trySubmitViaCommands();
+    if (viaCmd.ok) {
+        return viaCmd;
+    }
+    const useMac =
+        process.platform === 'darwin' && (cfg.get<boolean>('fallbackMacOsSubmit') ?? true);
+    if (useMac) {
+        try {
+            await macOsSyntheticEnter();
+            return { ok: true, command: 'macOsSyntheticEnter' };
+        } catch (e) {
+            const em = errMessage(e);
+            console.error('[cursor-auto-chat] macOsSyntheticEnter:', em);
+            maybeNotifyMacAccessibilityHelp(em);
         }
     }
     void vscode.window.showInformationMessage('内容已填充，请按下 Enter（或 Cmd/Ctrl+Enter，视设置而定）发送');
@@ -466,7 +508,7 @@ function attachChatRoutes(server: http.Server, port: number): void {
                         await focusForUi(opened.ui);
                         await delay(120);
 
-                        const submitResult = await submitOrHint();
+                        const submitResult = await submitWithMacOsFallback(config);
 
                         sendJson(res, 200, {
                             success: true,
