@@ -465,9 +465,9 @@ function attachChatRoutes(server: http.Server, port: number): void {
                 void (async () => {
                     const config = vscode.workspace.getConfiguration('cursorAutoChat');
                     try {
-                        let data: { content?: string };
+                        let data: { content?: string; autoSubmit?: boolean };
                         try {
-                            data = JSON.parse(body.trim()) as { content?: string };
+                            data = JSON.parse(body.trim()) as { content?: string; autoSubmit?: boolean };
                         } catch (e) {
                             sendJson(res, 400, {
                                 success: false,
@@ -485,6 +485,9 @@ function attachChatRoutes(server: http.Server, port: number): void {
                             });
                             return;
                         }
+
+                        /** 仅当 JSON 里显式为 `false` 时关闭自动发送；缺省与其它值视为 true（兼容旧客户端） */
+                        const autoSubmit = data.autoSubmit !== false;
 
                         const target =
                             config.get<string>('target') === 'composer' ||
@@ -508,13 +511,16 @@ function attachChatRoutes(server: http.Server, port: number): void {
                         await focusForUi(opened.ui);
                         await delay(120);
 
-                        const submitResult = await submitWithMacOsFallback(config);
+                        const submitResult = autoSubmit
+                            ? await submitWithMacOsFallback(config)
+                            : null;
 
                         sendJson(res, 200, {
                             success: true,
                             message: 'Dialog opened and filled',
                             ui: opened.ui,
                             openCommand: opened.command,
+                            autoSubmit,
                             preferAgentMode:
                                 opened.ui === 'composer' && preferAgent ? true : false,
                             fillMethod: fill.method,
@@ -526,9 +532,10 @@ function attachChatRoutes(server: http.Server, port: number): void {
                                           '系统设置 → 隐私与安全性 → 辅助功能：勾选 Cursor（及 Cursor Helper (Plugin)）；仍报 osascript 时在同一页的「自动化」中允许 Cursor 控制 System Events。授权后请 Cmd+Q 退出 Cursor 再打开。',
                                   }
                                 : {}),
-                            submitted: submitResult.ok,
-                            submitCommand: submitResult.ok ? submitResult.command : null,
-                            submitFallback: !submitResult.ok,
+                            submitted: submitResult?.ok ?? false,
+                            submitCommand: submitResult?.ok ? submitResult.command : null,
+                            submitFallback: autoSubmit ? !(submitResult?.ok) : false,
+                            submitSkipped: !autoSubmit,
                         });
                     } catch (e) {
                         const message = errMessage(e);

@@ -159,6 +159,7 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `content` | 字符串 | 是 | 要填入输入框的完整文案（勿为空） |
+| `autoSubmit` | 布尔 | 否 | 填完后是否自动尝试发送（内置 `composer.submit` 等 + macOS 可选模拟回车）。**默认 `true`**（与旧版行为一致）；设为 **`false`** 则只填入、不触发发送，需你在输入框里自行回车或 Cmd+Enter |
 
 **成功时响应示例（字段随版本可能略增）**
 
@@ -170,9 +171,11 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
   "openCommand": "composer.newAgentChat",
   "preferAgentMode": true,
   "fillMethod": "macOsSyntheticPaste",
+  "autoSubmit": true,
   "submitted": false,
   "submitCommand": null,
-  "submitFallback": true
+  "submitFallback": true,
+  "submitSkipped": false
 }
 ```
 
@@ -180,9 +183,11 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 |------|------|
 | `ui` | `composer` 或 `chat`，表示主要走的是哪套界面 |
 | `openCommand` | 实际执行成功的「打开」命令 ID |
+| `autoSubmit` | 本次请求是否启用了「填完后自动发送」 |
 | `preferAgentMode` | 是否在本次请求中尝试切到 Agent |
 | `fillMethod` | 如 `macOsSyntheticPaste`、`inject:...`、`paste`、`type` 等 |
-| `submitted` / `submitCommand` / `submitFallback` | 是否自动发送成功；失败时 `submitFallback` 为 `true`，需用户手动发送 |
+| `submitted` / `submitCommand` / `submitFallback` | 尝试自动发送时：是否成功、所用命令；失败时 `submitFallback` 为 `true`，需用户手动发送 |
+| `submitSkipped` | 请求体将 `autoSubmit` 设为 `false` 时为 `true`，表示未尝试发送 |
 
 若 macOS 合成粘贴失败，可能额外包含：
 
@@ -202,6 +207,11 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 curl -s -X POST http://127.0.0.1:3777/chat \
   -H "Content-Type: application/json" \
   -d '{"content": "请帮我解释一下这段代码的作用"}'
+
+# 只填入、不自动发送（自行在 Composer 里按回车）
+curl -s -X POST http://127.0.0.1:3777/chat \
+  -H "Content-Type: application/json" \
+  -d '{"content": "先预览再发","autoSubmit":false}'
 ```
 
 ---
