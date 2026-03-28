@@ -1,0 +1,55 @@
+{
+  "name": "cursor-auto-chat",
+  "displayName": "Cursor Auto Chat",
+  "description": "Auto fill and submit cursor chat via local HTTP API",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Cursor Auto Chat",
+      "properties": {
+        "cursorAutoChat.port": {
+          "type": "number",
+          "default": 3777,
+          "description": "The port for the local HTTP server"
+        },
+        "cursorAutoChat.target": {
+          "type": "string",
+          "enum": ["auto", "composer", "chat"],
+          "default": "auto",
+          "description": "auto: try Cursor Composer (Agent) first, then VS Code Chat; composer / chat: only that UI"
+        },
+        "cursorAutoChat.fallbackMacOsPaste": {
+          "type": "boolean",
+          "default": true,
+          "description": "macOS only: activate Cursor and simulate Cmd+V for Lexical Composer. Requires System Settings → Privacy & Security → Accessibility (Cursor / Cursor Helper) and possibly Automation → allow Cursor to control System Events; quit Cursor fully after changing."
+        },
+        "cursorAutoChat.preferAgentMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "When using Composer, try to switch to Agent mode (not Ask) via workbench.action.chat.toggleAgentMode before filling."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
