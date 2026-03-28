@@ -2,6 +2,8 @@
 
 在 **Cursor** 内启动一个本地 HTTP 服务，通过 `POST` 请求打开 Composer / 聊天面板，并尽量自动填入文案、切换到 **Agent** 模式、尝试发送。
 
+**开发与验证基准**：本插件基于 **Cursor 2.6.22** 版本开发；其他版本若内置命令或界面有差异，部分自动化步骤可能需要自行对照调整。
+
 ### macOS 用户必读：必须授权「辅助功能」
 
 在 **macOS** 上，若保持默认配置 **`cursorAutoChat.fallbackMacOsPaste: true`**（推荐），扩展会通过 **AppleScript + 系统事件** 模拟 **Cmd+V**，把内容粘进 Composer。  
@@ -27,7 +29,7 @@
 
 ## 环境要求
 
-- **Cursor**（基于 VS Code，扩展在该环境中运行）
+- **Cursor 2.6.22**（本插件的开发与验证版本；其他版本通常可安装使用，若 `executeCommand` 或 UI 行为不一致，需按实际 Cursor 版本排查）
 - **Node.js**（开发/编译用）
 - 调用 `curl` 的机器需能访问扩展所在 Cursor 窗口的 **`localhost:端口`**（本机调试时两者在同一台电脑即可）
 - **macOS**：要使用默认的自动填入 Composer，需在系统中为 **Cursor** 授权 **「辅助功能」**（及可能的 **自动化 → System Events**）；否则请将 `cursorAutoChat.fallbackMacOsPaste` 设为 `false` 并接受可能无法自动填入
