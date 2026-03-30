@@ -17,13 +17,13 @@
 
 ## 功能概览
 
-| 能力 | 说明 |
-|------|------|
-| 本地 HTTP 接口 | 默认监听 `3777` 端口；可选 **仅前台窗口** 监听（多窗口同端口，见 `serveOnlyWhenFocused`） |
-| 打开界面 | 优先 **Composer**（`composer.newAgentChat` 等），失败再尝试 VS Code 风格 Chat |
-| Agent 模式 | 默认在填充前执行 `workbench.action.chat.toggleAgentMode` + `{ mode: 'agent' }` |
-| 填入内容 | Composer 为 **Lexical**；macOS 默认 **剪贴板 + 模拟 Cmd+V**，**必须先为 Cursor 授权「辅助功能」**（见上文） |
-| 发送 | 依次尝试 `composer.submit`、`workbench.action.chat.submit` 等；失败则提示手动回车 |
+| 能力           | 说明                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| 本地 HTTP 接口 | 默认监听 `3777` 端口；可选 **仅前台窗口** 监听（多窗口同端口，见 `serveOnlyWhenFocused`）                   |
+| 打开界面       | 优先 **Composer**（`composer.newAgentChat` 等），失败再尝试 VS Code 风格 Chat                               |
+| Agent 模式     | 默认在填充前执行 `workbench.action.chat.toggleAgentMode` + `{ mode: 'agent' }`                              |
+| 填入内容       | Composer 为 **Lexical**；macOS 默认 **剪贴板 + 模拟 Cmd+V**，**必须先为 Cursor 授权「辅助功能」**（见上文） |
+| 发送           | 依次尝试 `composer.submit`、`workbench.action.chat.submit` 等；失败则提示手动回车                           |
 
 ---
 
@@ -109,13 +109,14 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 
 ## 配置项（设置里搜索 `cursor auto chat`）
 
-| 键名 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `cursorAutoChat.port` | 数字 | `3777` | HTTP 监听端口 |
-| `cursorAutoChat.target` | `auto` \| `composer` \| `chat` | `auto` | `auto`：先试 Composer 再试 Chat；`composer` / `chat`：只走对应界面 |
-| `cursorAutoChat.fallbackMacOsPaste` | 布尔 | `true` | **仅 macOS**：合成粘贴（激活 Cursor + Cmd+V）。**依赖系统「辅助功能」授权 Cursor**，否则易报 1002 / 无法填入；关则 Composer 多半不能自动填字 |
-| `cursorAutoChat.preferAgentMode` | 布尔 | `true` | Composer 下填充前尝试切到 **Agent**（非 Ask） |
-| `cursorAutoChat.serveOnlyWhenFocused` | 布尔 | `false` | 为 **`true`** 时：仅在本 **Cursor 窗口处于应用前台** 时监听 HTTP；失焦则关闭服务。多窗口可共用同一 `port`，避免端口冲突。**注意**：从外部终端 `curl` 时需让目标 Cursor 窗口在前台，否则可能连接失败；若希望 Cursor 在后台仍常开服务，保持 `false` |
+| 键名                                  | 类型                           | 默认值  | 说明                                                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cursorAutoChat.port`                 | 数字                           | `3777`  | HTTP 监听端口                                                                                                                                                                                                                                     |
+| `cursorAutoChat.target`               | `auto` \| `composer` \| `chat` | `auto`  | `auto`：先试 Composer 再试 Chat；`composer` / `chat`：只走对应界面                                                                                                                                                                                |
+| `cursorAutoChat.fallbackMacOsPaste`   | 布尔                           | `true`  | **仅 macOS**：合成粘贴（激活 Cursor + Cmd+V）。**依赖系统「辅助功能」授权 Cursor**，否则易报 1002 / 无法填入；关则 Composer 多半不能自动填字                                                                                                      |
+| `cursorAutoChat.preferAgentMode`      | 布尔                           | `true`  | Composer 下填充前尝试切到 **Agent**（非 Ask）                                                                                                                                                                                                     |
+| `cursorAutoChat.model`                | 字符串                         | `Auto`  | 非 `Auto` 时调用 Cursor 内置 `cursorai.action.switchToModel` 写入 **Composer** 域模型。值须为 Cursor **内部 `modelName`（slug / 配置 id）**，与下拉展示名可能不一致（展示名含空格时常无效）                                                       |
+| `cursorAutoChat.serveOnlyWhenFocused` | 布尔                           | `false` | 为 **`true`** 时：仅在本 **Cursor 窗口处于应用前台** 时监听 HTTP；失焦则关闭服务。多窗口可共用同一 `port`，避免端口冲突。**注意**：从外部终端 `curl` 时需让目标 Cursor 窗口在前台，否则可能连接失败；若希望 Cursor 在后台仍常开服务，保持 `false` |
 
 在 **用户级或工作区级** `settings.json` 中示例：
 
@@ -156,10 +157,11 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 
 **请求体（JSON）**
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `content` | 字符串 | 是 | 要填入输入框的完整文案（勿为空） |
-| `autoSubmit` | 布尔 | 否 | 填完后是否自动尝试发送（内置 `composer.submit` 等 + macOS 可选模拟回车）。**默认 `true`**（与旧版行为一致）；设为 **`false`** 则只填入、不触发发送，需你在输入框里自行回车或 Cmd+Enter |
+| 字段         | 类型   | 必填 | 说明                                                                                                                                                                                   |
+| ------------ | ------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`    | 字符串 | 是   | 要填入输入框的完整文案（勿为空）                                                                                                                                                       |
+| `autoSubmit` | 布尔   | 否   | 填完后是否自动尝试发送（内置 `composer.submit` 等 + macOS 可选模拟回车）。**默认 `true`**（与旧版行为一致）；设为 **`false`** 则只填入、不触发发送，需你在输入框里自行回车或 Cmd+Enter |
+| `model`      | 字符串 | 否   | 非空时覆盖 `cursorAutoChat.model`；语义同设置项，须为 Cursor **内部 `modelName`**（见上表），不要用纯 UI 展示字符串                                                                    |
 
 **成功时响应示例（字段随版本可能略增）**
 
@@ -179,15 +181,19 @@ cursor --install-extension /绝对路径/cursor-auto-chat-0.0.1.vsix
 }
 ```
 
-| 字段 | 含义 |
-|------|------|
-| `ui` | `composer` 或 `chat`，表示主要走的是哪套界面 |
-| `openCommand` | 实际执行成功的「打开」命令 ID |
-| `autoSubmit` | 本次请求是否启用了「填完后自动发送」 |
-| `preferAgentMode` | 是否在本次请求中尝试切到 Agent |
-| `fillMethod` | 如 `macOsSyntheticPaste`、`inject:...`、`paste`、`type` 等 |
+| 字段                                             | 含义                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `ui`                                             | `composer` 或 `chat`，表示主要走的是哪套界面                                          |
+| `openCommand`                                    | 实际执行成功的「打开」命令 ID                                                         |
+| `autoSubmit`                                     | 本次请求是否启用了「填完后自动发送」                                                  |
+| `preferAgentMode`                                | 是否在本次请求中尝试切到 Agent                                                        |
+| `fillMethod`                                     | 如 `macOsSyntheticPaste`、`inject:...`、`paste`、`type` 等                            |
 | `submitted` / `submitCommand` / `submitFallback` | 尝试自动发送时：是否成功、所用命令；失败时 `submitFallback` 为 `true`，需用户手动发送 |
-| `submitSkipped` | 请求体将 `autoSubmit` 设为 `false` 时为 `true`，表示未尝试发送 |
+| `submitSkipped`                                  | 请求体将 `autoSubmit` 设为 `false` 时为 `true`，表示未尝试发送                        |
+| `model`                                          | 本次实际采用的模型配置值（请求覆盖或设置项合并后的结果）                              |
+| `modelSource`                                    | `request`：来自请求体 `model`；`settings`：来自 `cursorAutoChat.model`                |
+| `modelApplied`                                   | 非 `Auto` 且内置切换命令成功时为 `true`                                               |
+| `modelApplyCommand`                              | 切换成功时可选，表示命中的命令 ID                                                     |
 
 若 macOS 合成粘贴失败，可能额外包含：
 
@@ -212,6 +218,11 @@ curl -s -X POST http://127.0.0.1:3777/chat \
 curl -s -X POST http://127.0.0.1:3777/chat \
   -H "Content-Type: application/json" \
   -d '{"content": "先预览再发","autoSubmit":false}'
+
+# 本次请求指定模型（覆盖工作区设置；值需与本机 Cursor 支持的 id 一致）
+curl -s -X POST http://127.0.0.1:3777/chat \
+  -H "Content-Type: application/json" \
+  -d '{"content":"说明 main 入口","model":"Claude Sonnet 4.5","autoSubmit":false}'
 ```
 
 ---
@@ -281,14 +292,14 @@ A：各窗口默认都会抢同一端口。可将 **`cursorAutoChat.serveOnlyWhe
 
 ## 项目脚本
 
-| 命令 | 作用 |
-|------|------|
-| `npm install` | 安装依赖（含打包用的 `@vscode/vsce`） |
-| `npm run compile` | 编译 TypeScript → `out/` |
-| `npm run watch` | 监听编译 |
-| `npm run vscode:prepublish` | 发布前编译（`vsce package` 会自动调用） |
-| `npm run vsix` | 编译并打包为根目录下的 `.vsix`（安装到 Cursor 用） |
-| `npm run package-extension` | 与 `npm run vsix` 相同 |
+| 命令                        | 作用                                               |
+| --------------------------- | -------------------------------------------------- |
+| `npm install`               | 安装依赖（含打包用的 `@vscode/vsce`）              |
+| `npm run compile`           | 编译 TypeScript → `out/`                           |
+| `npm run watch`             | 监听编译                                           |
+| `npm run vscode:prepublish` | 发布前编译（`vsce package` 会自动调用）            |
+| `npm run vsix`              | 编译并打包为根目录下的 `.vsix`（安装到 Cursor 用） |
+| `npm run package-extension` | 与 `npm run vsix` 相同                             |
 
 ---
 

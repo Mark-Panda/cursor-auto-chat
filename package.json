@@ -29,6 +29,11 @@
           "default": "auto",
           "description": "auto: try Cursor Composer (Agent) first, then VS Code Chat; composer / chat: only that UI"
         },
+        "cursorAutoChat.model": {
+          "type": "string",
+          "default": "Auto",
+          "description": "Auto: no switch. Otherwise Cursor internal modelName passed to cursorai.action.switchToModel (2nd arg composer). Must match Cursor config id/slug, not necessarily the dropdown label (e.g. avoid spaced display names)."
+        },
         "cursorAutoChat.fallbackMacOsPaste": {
           "type": "boolean",
           "default": true,

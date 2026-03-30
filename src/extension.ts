@@ -210,6 +210,65 @@ async function focusForUi(ui: UiTarget): Promise<void> {
  * 将统一聊天 / Composer 切到 Agent（避免停留在 Ask）。
  * 与 Cursor 内置一致：workbench.action.chat.toggleAgentMode + { mode: 'agent' }。
  */
+function normalizeModelSetting(raw: string | undefined): string {
+    const s = (raw ?? 'Auto').trim();
+    return s === '' ? 'Auto' : s;
+}
+
+function isAutoModel(model: string): boolean {
+    return model.toLowerCase() === 'auto';
+}
+
+/** 请求体里非空 `model` 覆盖工作区设置；省略或仅空白则沿用 `cursorAutoChat.model`。 */
+function resolveModelForRequest(
+    bodyModel: unknown,
+    configModel: string | undefined
+): { model: string; source: 'request' | 'settings' } {
+    if (typeof bodyModel === 'string' && bodyModel.trim() !== '') {
+        return { model: normalizeModelSetting(bodyModel), source: 'request' };
+    }
+    return { model: normalizeModelSetting(configModel), source: 'settings' };
+}
+
+/**
+ * Cursor 内置：`cursorai.action.switchToModel(modelName, surface)`，第二参须为配置域（如 `composer`）。
+ * `modelName` 为 Cursor 内部名（与设置/云端模型配置一致），一般不是下拉框里的展示文案（如含空格的「Sonnet 4.5」）。
+ */
+async function tryApplyChatModel(model: string, _ui: UiTarget): Promise<string | null> {
+    const primary: { cmd: string; args: unknown[] }[] = [
+        { cmd: 'cursorai.action.switchToModel', args: [model, 'composer'] },
+    ];
+    for (const { cmd, args } of primary) {
+        try {
+            await vscode.commands.executeCommand(cmd, ...args);
+            return cmd;
+        } catch {
+            /* 命令不存在或非 Cursor 环境 */
+        }
+    }
+
+    const legacy: [string, unknown][] = [
+        ['workbench.action.chat.selectModel', model],
+        ['workbench.action.chat.selectModel', { modelId: model }],
+        ['workbench.action.chat.selectModel', { id: model }],
+        ['composer.selectModel', model],
+        ['composer.selectModel', { modelId: model }],
+        ['cursor.action.chat.selectModel', model],
+        ['cursor.action.composer.selectModel', model],
+        ['composer.setModel', model],
+        ['composer.setModel', { modelId: model }],
+    ];
+    for (const [cmd, arg] of legacy) {
+        try {
+            await vscode.commands.executeCommand(cmd, arg);
+            return cmd;
+        } catch {
+            /* 下一组 */
+        }
+    }
+    return null;
+}
+
 async function preferAgentModeInComposer(): Promise<void> {
     for (let round = 0; round < 2; round++) {
         if (round > 0) {
@@ -465,9 +524,13 @@ function attachChatRoutes(server: http.Server, port: number): void {
                 void (async () => {
                     const config = vscode.workspace.getConfiguration('cursorAutoChat');
                     try {
-                        let data: { content?: string; autoSubmit?: boolean };
+                        let data: { content?: string; autoSubmit?: boolean; model?: string };
                         try {
-                            data = JSON.parse(body.trim()) as { content?: string; autoSubmit?: boolean };
+                            data = JSON.parse(body.trim()) as {
+                                content?: string;
+                                autoSubmit?: boolean;
+                                model?: string;
+                            };
                         } catch (e) {
                             sendJson(res, 400, {
                                 success: false,
@@ -506,6 +569,22 @@ function attachChatRoutes(server: http.Server, port: number): void {
                             await delay(120);
                         }
 
+                        const { model: modelSetting, source: modelSource } = resolveModelForRequest(
+                            data.model,
+                            config.get<string>('model')
+                        );
+                        let modelApplyCommand: string | null = null;
+                        if (!isAutoModel(modelSetting)) {
+                            modelApplyCommand = await tryApplyChatModel(modelSetting, opened.ui);
+                            if (modelApplyCommand) {
+                                await delay(200);
+                            } else {
+                                console.debug(
+                                    `[cursor-auto-chat] 模型切换未命中可用命令（${modelSetting}）。请使用 Cursor 内部 modelName，而非下拉展示名；当前将保持 UI 已选模型。`
+                                );
+                            }
+                        }
+
                         const fill = await fillPromptForUi(opened.ui, content, config);
                         await delay(200);
                         await focusForUi(opened.ui);
@@ -521,6 +600,11 @@ function attachChatRoutes(server: http.Server, port: number): void {
                             ui: opened.ui,
                             openCommand: opened.command,
                             autoSubmit,
+                            model: modelSetting,
+                            modelSource,
+                            modelApplied:
+                                !isAutoModel(modelSetting) && modelApplyCommand !== null,
+                            ...(modelApplyCommand ? { modelApplyCommand } : {}),
                             preferAgentMode:
                                 opened.ui === 'composer' && preferAgent ? true : false,
                             fillMethod: fill.method,
